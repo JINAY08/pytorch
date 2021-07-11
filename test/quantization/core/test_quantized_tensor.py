@@ -783,6 +783,32 @@ class TestQuantizedTensor(TestCase):
             self.assertEqual(q_filled.q_scale(), scale)
             self.assertEqual(q_filled.q_zero_point(), zero_point)
 
+    @unittest.skipIf(not TEST_CUDA, "No gpu is available.")
+    def test_qtensor_index_select_cuda(self):
+        self._test_qtensor_index_select('cuda')
+
+    def test_qtensor_index_select_cpu(self):
+        self._test_qtensor_index_select('cpu')
+
+    def _test_qtensor_index_select(self, device):
+        for quant_type in [torch.quint8, torch.qint8]:
+            dims = 3
+            index = torch.randint(dims, [1]).item()
+            selected = torch.randperm(dims)[:2].to(device)
+            scale = 1
+            zp = 0
+
+            x = torch.randn([3] * dims, device=device) * 10
+            q = torch.quantize_per_tensor(x, scale, zp, quant_type)
+            qs = torch.index_select(q, index, selected)
+            for altered_index in range(2):
+                for i in range(3):
+                    for j in range(3):
+                        qs_coord, q_coord = [i, j], [i, j]
+                        qs_coord.insert(index, altered_index)
+                        q_coord.insert(index, selected[altered_index])
+                        self.assertEqual(qs[tuple(qs_coord)].item(), q[tuple(q_coord)].item())
+
     def test_qtensor_view(self):
         scale, zero_point, dtype = 1.0, 2, torch.uint8
         for device in get_supported_device_types():
